@@ -37,7 +37,7 @@ TEMPE=$(vcgencmd measure_temp | sed "s/temp=\(.*\)'C/\1°C/") || {
     trim_logfile
     exit 1
 }
-WLAN_SIGNAL=$(iwconfig wlan0 2>/dev/null | grep -o 'Signal level=.*dBm' | sed 's/Signal level=//') || WLAN_SIGNAL="N/A"
+WLAN_SIGNAL=$(iw dev wlan0 link 2>/dev/null | grep 'signal:' | sed 's/.*signal: \(.*\) dBm.*/\1 dBm/') || WLAN_SIGNAL="N/A"
 UPTIME_VAL=$(uptime -p | sed 's/up //') || UPTIME_VAL="N/A"
 
 # === Kameraaufnahme ===
