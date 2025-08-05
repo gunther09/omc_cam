@@ -21,4 +21,7 @@ if [ $? -eq 0 ]; then
 
     # Scripts ausführbar machen
     chmod +x *.sh
-"update.sh" 28 lines, 606 bytes
+else
+    echo "❌  Update fehlgeschlagen!"
+    exit 1
+fi
