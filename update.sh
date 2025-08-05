@@ -10,9 +10,13 @@ if [ ! -f "/home/OMC/config.sh" ]; then
     exit 1
 fi
 
-# Git pull ausführen
+# Git pull ausführen - lokale Änderungen ignorieren
 echo "Hole Updates von GitHub..."
 cd /home/OMC
+
+# Lokale Änderungen an Git-verfolgten Dateien verwerfen
+echo "Verwerfe lokale Änderungen an Git-Dateien..."
+git reset --hard HEAD
 git pull origin main
 
 if [ $? -eq 0 ]; then
