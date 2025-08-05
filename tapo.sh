@@ -37,7 +37,33 @@ TEMPE=$(vcgencmd measure_temp | sed "s/temp=\(.*\)'C/\1°C/") || {
     trim_logfile
     exit 1
 }
+# WLAN-Signal mit Qualitätsbewertung
+get_wlan_quality() {
+    local signal_dbm="$1"
+    case "$signal_dbm" in
+        -*[0-9]*) # Negative Zahl (dBm-Wert)
+            local dbm_num=$(echo "$signal_dbm" | sed 's/-//' | sed 's/ dBm//')
+            if [ "$dbm_num" -le 50 ]; then
+                echo "(Exzellent)"
+            elif [ "$dbm_num" -le 60 ]; then
+                echo "(Sehr gut)"
+            elif [ "$dbm_num" -le 70 ]; then
+                echo "(Gut)"
+            elif [ "$dbm_num" -le 80 ]; then
+                echo "(Ausreichend)"
+            elif [ "$dbm_num" -le 90 ]; then
+                echo "(Schlecht)"
+            else
+                echo "(Unbrauchbar)"
+            fi
+            ;;
+        *) echo "(Unbekannt)" ;;
+    esac
+}
+
 WLAN_SIGNAL=$(iw dev wlan0 link 2>/dev/null | grep 'signal:' | sed 's/.*signal: \(.*\) dBm.*/\1 dBm/') || WLAN_SIGNAL="N/A"
+WLAN_QUALITY=$(get_wlan_quality "$WLAN_SIGNAL")
+WLAN_DISPLAY="$WLAN_SIGNAL $WLAN_QUALITY"
 UPTIME_VAL=$(uptime -p | sed 's/up //') || UPTIME_VAL="N/A"
 
 # === Kameraaufnahme ===
@@ -60,7 +86,7 @@ convert "$IMAGE" \
     -draw "text 15,25 'Offroad Minicar-Crew e.V.'" \
     -draw "text 15,55 '$DATE'" \
     -draw "text 15,85 'CPU $TEMPE'" \
-    -draw "text 15,115 'WLAN $WLAN_SIGNAL'" \
+    -draw "text 15,115 'WLAN $WLAN_DISPLAY'" \
     -draw "text 15,145 'Uptime: $UPTIME_VAL'" \
     "$IMAGE"
 
