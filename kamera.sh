@@ -153,6 +153,7 @@ DATE=$(date +"%d.%m.%Y - %H:%M") || handle_error "Fehler beim Setzen von DATE"
 FILEDATE=$(date +"%d-%m-%Y--%H-%M") || handle_error "Fehler beim Setzen von FILEDATE"
 MONAT=$(date +"%Y-%m") || handle_error "Fehler beim Setzen von MONAT"
 TEMPE=$(vcgencmd measure_temp | sed "s/temp=\(.*\)'C/\1°C/") || handle_error "Fehler beim Messen der Temperatur"
+WLAN_SIGNAL=$(iw dev wlan0 link 2>/dev/null | grep 'signal:' | sed 's/.*signal: \(.*\) dBm.*/\1 dBm/') || WLAN_SIGNAL="N/A"
 # Aufnahme des Kamerabildes
 raspistill -w 1920 -h 1080 -q 100 -ex auto --nopreview -awb auto -vf -hf -rot 90 -o "$IMAGE" || handle_error "Fehler beim Aufnehmen des Kamerabilds"
 # Bildbearbeitung mit ImageMagick
@@ -163,6 +164,7 @@ convert "$IMAGE" \
     -draw "text 15,25 'Offroad Minicar-Crew e.V.'" \
     -draw "text 15,55 '$DATE'" \
     -draw "text 15,85 'CPU $TEMPE'" \
+    -draw "text 15,115 'WLAN $WLAN_SIGNAL'" \
     -gravity northwest \
     -fill "#8A9A9A" -draw "rectangle 0,0 600,600" \
     "$IMAGE" || handle_error "Fehler bei der Bildbearbeitung mit ImageMagick"
