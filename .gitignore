@@ -4,8 +4,8 @@
 *.png
 *.log
 *.tmp
-+.pdf
-*-ps1
+*.pdf
+*.ps1
 
 # Konfigurationsdateien mit sensiblen Daten
 config.sh
