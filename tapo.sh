@@ -29,25 +29,33 @@ trim_logfile() {
     [ -f "$LOGFILE" ] && tail -n "$MAX_LOG_LINES" "$LOGFILE" > "$LOGFILE.tmp" && mv "$LOGFILE.tmp" "$LOGFILE"
 }
 
-# === Logging-Funktion für Silent Mode ===
-log_message() {
-    local level="$1"
-    local message="$2"
-    echo "$(date) [$level] $message" >> "$LOGFILE"
-    # Bei Fehlern auch auf stderr ausgeben für Cronjob-Monitoring
-    if [ "$level" = "ERROR" ]; then
-        echo "FEHLER: $message" >&2
-    fi
+# === Logging-Funktionen ===
+# Fehler-Logging (detailliert)
+log_error() {
+    local message="$1"
+    echo "$(date) [ERROR] $message" >> "$LOGFILE"
+    echo "FEHLER: $message" >&2
+    trim_logfile
+}
+
+# Erfolgs-Logging (minimal wie kamera.sh)
+log_success() {
+    TODAY=$(date +"%d.%m.%Y")
+    # Erfolg im Hauptlog protokollieren (Tageszeile oder neue Zeile)
+    grep -q "$TODAY" "$LOGFILE" && sed -i "/$TODAY/s/$/|/" "$LOGFILE" || {
+        LINE_NUM=$(($(wc -l < "$LOGFILE") + 1))
+        echo "$LINE_NUM [$TODAY] |" >> "$LOGFILE"
+    }
     trim_logfile
 }
 
 # === Datums- und Temperaturvariablen setzen ===
 DATE=$(date +"%d.%m.%Y - %H:%M") || {
-    log_message "ERROR" "Fehler beim Setzen von DATE"
+    log_error "Fehler beim Setzen von DATE"
     exit 2
 }
 TEMPE=$(vcgencmd measure_temp | sed "s/temp=\(.*\)'C/\1°C/") || {
-    log_message "ERROR" "Fehler beim Messen der Temperatur"
+    log_error "Fehler beim Messen der Temperatur"
     exit 2
 }
 # WLAN-Signal mit Qualitätsbewertung
@@ -80,17 +88,28 @@ WLAN_DISPLAY="$WLAN_SIGNAL $WLAN_QUALITY"
 UPTIME_VAL=$(uptime -p | sed 's/up //') || UPTIME_VAL="N/A"
 
 # === Kameraaufnahme mit Timeout ===
+# Temporäre Datei für ffmpeg-Fehlermeldungen
+FFMPEG_ERROR_FILE="/tmp/ffmpeg_error_$$"
+
 timeout 30 ffmpeg -y -loglevel error -i "$RTSP_URL" \
-  -vframes 1 -q:v 5 "$IMAGE" 2>/dev/null
+  -vframes 1 -q:v 5 "$IMAGE" 2>"$FFMPEG_ERROR_FILE"
 
 FFMPEG_EXIT=$?
 if [ $FFMPEG_EXIT -eq 124 ]; then
-    log_message "ERROR" "Kamera-Timeout nach 30 Sekunden"
+    log_error "Kamera-Timeout nach 30 Sekunden - Keine Verbindung zur Kamera ($RTSP_URL)"
     exit 3
 elif [ $FFMPEG_EXIT -ne 0 ]; then
-    log_message "ERROR" "Kameraaufnahme fehlgeschlagen (Exit Code: $FFMPEG_EXIT)"
+    # Fehlermeldung aus ffmpeg-Output lesen
+    FFMPEG_ERROR=""
+    if [ -f "$FFMPEG_ERROR_FILE" ] && [ -s "$FFMPEG_ERROR_FILE" ]; then
+        FFMPEG_ERROR=$(cat "$FFMPEG_ERROR_FILE" | head -3 | tr '\n' '; ')
+    fi
+    log_error "Kameraaufnahme fehlgeschlagen (Exit Code: $FFMPEG_EXIT) - Verbindung zu $RTSP_URL: $FFMPEG_ERROR"
     exit 3
 fi
+
+# Temporäre Datei aufräumen
+rm -f "$FFMPEG_ERROR_FILE"
 
 # === Bildbearbeitung mit ImageMagick ===
 convert "$IMAGE" \
@@ -107,7 +126,7 @@ convert "$IMAGE" \
     "$IMAGE" 2>/dev/null
 
 if [ $? -ne 0 ]; then
-    log_message "ERROR" "Bildbearbeitung fehlgeschlagen"
+    log_error "Bildbearbeitung fehlgeschlagen"
     exit 4
 fi
 
@@ -116,10 +135,10 @@ timeout 60 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=30 -o ServerAliveInterva
 
 UPLOAD_EXIT=$?
 if [ $UPLOAD_EXIT -eq 124 ]; then
-    log_message "ERROR" "Bild-Upload-Timeout nach 60 Sekunden"
+    log_error "Bild-Upload-Timeout nach 60 Sekunden"
     exit 5
 elif [ $UPLOAD_EXIT -ne 0 ]; then
-    log_message "ERROR" "Bild-Upload fehlgeschlagen (Exit Code: $UPLOAD_EXIT)"
+    log_error "Bild-Upload fehlgeschlagen (Exit Code: $UPLOAD_EXIT)"
     exit 5
 fi
 
@@ -128,10 +147,13 @@ timeout 30 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=15 -o ServerAliveInterva
 
 LOG_UPLOAD_EXIT=$?
 if [ $LOG_UPLOAD_EXIT -eq 124 ]; then
-    log_message "WARNING" "Log-Upload-Timeout nach 30 Sekunden - Bild wurde trotzdem hochgeladen"
+    # Log-Upload-Fehler sind nicht kritisch, trotzdem Erfolg protokollieren
+    log_success
 elif [ $LOG_UPLOAD_EXIT -ne 0 ]; then
-    log_message "WARNING" "Log-Upload fehlgeschlagen (Exit Code: $LOG_UPLOAD_EXIT) - Bild wurde trotzdem hochgeladen"
+    # Log-Upload-Fehler sind nicht kritisch, trotzdem Erfolg protokollieren
+    log_success
 else
-    log_message "SUCCESS" "Webcam-Upload erfolgreich abgeschlossen"
+    # Alles erfolgreich
+    log_success
 fi
 
