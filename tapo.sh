@@ -13,6 +13,10 @@ fi
 # Konfiguration laden
 . "$CONFIG_FILE"
 
+# === Umgebungsvariablen für Cron-Job-Kompatibilität ===
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export HOME="/home/OMC"
+
 # === Lokale Konfiguration ===
 WORK_DIR="/home/OMC"
 IMAGE="$WORK_DIR/tapocam.jpg"
@@ -97,7 +101,7 @@ UPTIME_VAL=$(uptime -p | sed 's/up //') || UPTIME_VAL="N/A"
 # Temporäre Datei für ffmpeg-Fehlermeldungen
 FFMPEG_ERROR_FILE="/tmp/ffmpeg_error_$$"
 
-timeout 30 ffmpeg -y -loglevel error -i "$RTSP_URL" \
+timeout 30 /usr/bin/ffmpeg -y -loglevel error -i "$RTSP_URL" \
   -vframes 1 -q:v 5 "$IMAGE" 2>"$FFMPEG_ERROR_FILE"
 
 FFMPEG_EXIT=$?
