@@ -82,7 +82,13 @@ get_wlan_quality() {
     esac
 }
 
-WLAN_SIGNAL=$(iw dev wlan0 link 2>/dev/null | grep 'signal:' | sed 's/.*signal: \(.*\) dBm.*/\1 dBm/') || WLAN_SIGNAL="N/A"
+# WLAN-Interface ermitteln und Signal messen
+WLAN_INTERFACE=$(ls /sys/class/net/ 2>/dev/null | grep -E '^(wlan|wifi)' | head -1)
+if [ -z "$WLAN_INTERFACE" ]; then
+    WLAN_INTERFACE="wlan0"  # Fallback
+fi
+
+WLAN_SIGNAL=$(/sbin/iw dev "$WLAN_INTERFACE" link 2>/dev/null | grep 'signal:' | sed 's/.*signal: \(.*\) dBm.*/\1 dBm/') || WLAN_SIGNAL="N/A"
 WLAN_QUALITY=$(get_wlan_quality "$WLAN_SIGNAL")
 WLAN_DISPLAY="$WLAN_SIGNAL $WLAN_QUALITY"
 UPTIME_VAL=$(uptime -p | sed 's/up //') || UPTIME_VAL="N/A"
