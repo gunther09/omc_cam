@@ -178,7 +178,7 @@ get_wlan_quality() {
     esac
 }
 
-WLAN_SIGNAL=$(iw dev wlan0 link 2>/dev/null | grep 'signal:' | sed 's/.*signal: \(.*\) dBm.*/\1 dBm/') || WLAN_SIGNAL="N/A"
+WLAN_SIGNAL=$(/sbin/iw dev wlan0 link 2>/dev/null | grep 'signal:' | sed 's/.*signal: \(.*\) dBm.*/\1 dBm/') || WLAN_SIGNAL="N/A"
 WLAN_QUALITY=$(get_wlan_quality "$WLAN_SIGNAL")
 WLAN_DISPLAY="$WLAN_SIGNAL $WLAN_QUALITY"
 # Aufnahme des Kamerabildes
