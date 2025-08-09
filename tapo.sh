@@ -122,10 +122,11 @@ fi
 rm -f "$FFMPEG_ERROR_FILE"
 
 # === Bildbearbeitung mit ImageMagick ===
+# pixel werden von links oben gezählt
 convert "$IMAGE" \
     \
-    -fill "#333333" -draw "rectangle 20,450 800,530" \
-    -fill "#333333" -draw "rectangle 1630,350 1800,500" \
+    -fill "#333333" -draw "rectangle 20,530 800,610" \ #linke breite Balken 
+    -fill "#333333" -draw "rectangle 1630,450 1800,600" \ # rechte viereck 
     -gravity northeast \
     -pointsize 23 -fill white \
     -draw "text 15,25 'Offroad Minicar-Crew e.V.'" \
