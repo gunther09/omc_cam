@@ -122,11 +122,9 @@ fi
 rm -f "$FFMPEG_ERROR_FILE"
 
 # === Bildbearbeitung mit ImageMagick ===
-# pixel werden von links oben gezählt
-# erst linke breite Balken  - dann der rechteckige rechts
+# Pixel werden von links oben gezählt
 convert "$IMAGE" \
-    \
-    -fill "#333333" -draw "rectangle 20,530 800,610" \ 
+    -fill "#333333" -draw "rectangle 20,530 800,610" \
     -fill "#333333" -draw "rectangle 1630,450 1800,600" \
     -gravity northeast \
     -pointsize 23 -fill white \
