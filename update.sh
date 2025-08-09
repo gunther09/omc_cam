@@ -10,14 +10,17 @@ if [ ! -f "/home/OMC/config.sh" ]; then
     exit 1
 fi
 
-# Git pull ausführen - lokale Änderungen ignorieren
+# Git-Stand HART auf origin/main setzen (ohne Merge)
 echo "Hole Updates von GitHub..."
 cd /home/OMC
 
-# Lokale Änderungen an Git-verfolgten Dateien verwerfen
-echo "Verwerfe lokale Änderungen an Git-Dateien..."
-git reset --hard HEAD
-git pull origin main
+# Lokale Änderungen komplett verwerfen und exakt auf origin/main setzen
+echo "Verwerfe lokale Änderungen und setze Arbeitsbaum auf origin/main..."
+git fetch --all --prune
+git reset --hard origin/main
+# Optional: Untracked Dateien/Ordner entfernen (gefährlich). Auskommentiert lassen oder bewusst aktivieren.
+# git clean -fd    # entfernt untracked Dateien/Ordner (aus Repo-Sicht)
+# git clean -fdx   # entfernt zusätzlich ignorierte Dateien (z.B. Build-Artefakte)
 
 if [ $? -eq 0 ]; then
     echo "✅  Update erfolgreich!"
