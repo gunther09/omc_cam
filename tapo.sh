@@ -101,12 +101,12 @@ UPTIME_VAL=$(uptime -p | sed 's/up //') || UPTIME_VAL="N/A"
 # Temporäre Datei für ffmpeg-Fehlermeldungen
 FFMPEG_ERROR_FILE="/tmp/ffmpeg_error_$$"
 
-timeout 30 /usr/bin/ffmpeg -y -loglevel error -i "$RTSP_URL" \
+timeout 60 /usr/bin/ffmpeg -y -loglevel error -rtsp_transport tcp -rtsp_flags prefer_tcp -stimeout 20000000 -i "$RTSP_URL" \
   -vframes 1 -q:v 5 "$IMAGE" 2>"$FFMPEG_ERROR_FILE"
 
 FFMPEG_EXIT=$?
 if [ $FFMPEG_EXIT -eq 124 ]; then
-    log_error "Kamera-Timeout nach 30 Sekunden - Keine Verbindung zur Kamera ($RTSP_URL)"
+    log_error "Kamera-Timeout nach 60 Sekunden - Keine Verbindung zur Kamera ($RTSP_URL)"
     exit 3
 elif [ $FFMPEG_EXIT -ne 0 ]; then
     # Fehlermeldung aus ffmpeg-Output lesen
