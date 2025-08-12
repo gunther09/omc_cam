@@ -17,7 +17,6 @@ fi
 WORK_DIR="/home/OMC"
 LOGFILE="$WORK_DIR/kamera.log"
 STATUS_FILE="$WORK_DIR/error.log" # Behält den Namen, erlaubt jetzt Kommentare
-DIAG_LOGFILE="$WORK_DIR/Netzwerkanalyse.log" # NEUE Datei für Diagnose
 IMAGE="$WORK_DIR/strecke.jpg"
 cd $WORK_DIR || exit 1
 
@@ -111,33 +110,7 @@ handle_error() {
     fi
 }
 
-# --- Temporäre Diagnose direkt zu Beginn (schreibt in DIAG_LOGFILE) ---
-# echo "=== Diagnose Start $(date) ===" >> "$DIAG_LOGFILE"
-# echo "--- USB Geräte ---" >> "$DIAG_LOGFILE"
-# lsusb >> "$DIAG_LOGFILE" 2>&1
-# echo "--- Netzwerk Interfaces ---" >> "$DIAG_LOGFILE"
-# ip a >> "$DIAG_LOGFILE" 2>&1
-# echo "--- Stromversorgung/Throttling ---" >> "$DIAG_LOGFILE"
-# # Prüfen ob vcgencmd existiert und ausführbar ist
-# if command -v vcgencmd > /dev/null && [ -x "$(command -v vcgencmd)" ]; then
-#     vcgencmd get_throttled >> "$DIAG_LOGFILE" 2>&1
-# else
-#     echo "vcgencmd nicht gefunden oder nicht ausführbar." >> "$DIAG_LOGFILE"
-# fi
-# echo "--- Modem Status (falls mmcli vorhanden) ---" >> "$DIAG_LOGFILE"
-# # Prüfen ob mmcli existiert
-# if command -v mmcli > /dev/null; then
-#    mmcli -L >> "$DIAG_LOGFILE" 2>&1
-#    # Versuche Details für Modems zu bekommen (kann fehlschlagen, wenn keins da)
-#    mmcli -L | grep -Eo '[0-9]+$' | while read -r modem_index; do
-#        echo "--- Details Modem $modem_index ---" >> "$DIAG_LOGFILE"
-#        mmcli -m "$modem_index" >> "$DIAG_LOGFILE" 2>&1
-#    done
-# else
-#    echo "mmcli nicht gefunden." >> "$DIAG_LOGFILE"
-# fi
-# echo "=== Diagnose Ende ===" >> "$DIAG_LOGFILE"
-# --- Ende Temporäre Diagnose ---
+
 
 # Internetverbindungs-Check zu Beginn
 ping -c 4 8.8.8.8 > /dev/null 2>&1
