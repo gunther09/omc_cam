@@ -34,11 +34,20 @@ trim_logfile() {
 }
 
 # === Logging-Funktionen ===
+# Hilfsfunktion: Entfernt Benutzername und Passwort aus URLs für sicheres Logging
+sanitize_url() {
+    local url="$1"
+    # Ersetzt rtsp://user:pass@host mit rtsp://***:***@host
+    echo "$url" | sed 's|rtsp://[^:]*:[^@]*@|rtsp://***:***@|g'
+}
+
 # Fehler-Logging (detailliert)
 log_error() {
     local message="$1"
-    echo "$(date) [ERROR] $message" >> "$LOGFILE"
-    echo "FEHLER: $message" >&2
+    # Sanitize message vor dem Logging
+    local safe_message="$(sanitize_url "$message")"
+    echo "$(date) [ERROR] $safe_message" >> "$LOGFILE"
+    echo "FEHLER: $safe_message" >&2
     trim_logfile
 }
 
