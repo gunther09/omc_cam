@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# === Konfiguration laden ===
+# === Konfiguration laden === 
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 CONFIG_FILE="$SCRIPT_DIR/config.sh"
 
