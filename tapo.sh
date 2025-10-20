@@ -139,29 +139,58 @@ if [ $? -ne 0 ]; then
 fi
 
 # === Upload mit Timeout ===
-timeout 60 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=30 -o ServerAliveInterval=10 "$IMAGE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/tapo.jpg" 2>/dev/null
+# Temporäre Datei für SCP-Fehlermeldungen
+SCP_ERROR_FILE="/tmp/scp_error_$$"
+
+timeout 60 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=30 -o ServerAliveInterval=10 "$IMAGE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/tapo.jpg" 2>"$SCP_ERROR_FILE"
 
 UPLOAD_EXIT=$?
 if [ $UPLOAD_EXIT -eq 124 ]; then
     log_error "Bild-Upload-Timeout nach 60 Sekunden"
+    rm -f "$SCP_ERROR_FILE"
     exit 5
 elif [ $UPLOAD_EXIT -ne 0 ]; then
-    log_error "Bild-Upload fehlgeschlagen (Exit Code: $UPLOAD_EXIT)"
+    # Fehlermeldung aus SCP-Output lesen
+    SCP_ERROR=""
+    if [ -f "$SCP_ERROR_FILE" ] && [ -s "$SCP_ERROR_FILE" ]; then
+        SCP_ERROR=$(cat "$SCP_ERROR_FILE" | head -3 | tr '\n' '; ')
+    fi
+    log_error "Bild-Upload fehlgeschlagen (Exit Code: $UPLOAD_EXIT) - Details: $SCP_ERROR"
+    rm -f "$SCP_ERROR_FILE"
     exit 5
 fi
 
+# Temporäre Datei aufräumen
+rm -f "$SCP_ERROR_FILE"
+
 # === Log mit hochladen (nur wenn Bild erfolgreich hochgeladen wurde) ===
-timeout 30 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=15 -o ServerAliveInterval=5 "$LOGFILE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/tapo.log" 2>/dev/null
+# Temporäre Datei für Log-Upload-Fehlermeldungen
+LOG_SCP_ERROR_FILE="/tmp/log_scp_error_$$"
+
+timeout 30 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=15 -o ServerAliveInterval=5 "$LOGFILE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/tapo.log" 2>"$LOG_SCP_ERROR_FILE"
 
 LOG_UPLOAD_EXIT=$?
 if [ $LOG_UPLOAD_EXIT -eq 124 ]; then
-    # Log-Upload-Fehler sind nicht kritisch, trotzdem Erfolg protokollieren
+    # Log-Upload-Fehler sind nicht kritisch, aber wir loggen sie trotzdem
+    LOG_ERROR=""
+    if [ -f "$LOG_SCP_ERROR_FILE" ] && [ -s "$LOG_SCP_ERROR_FILE" ]; then
+        LOG_ERROR=$(cat "$LOG_SCP_ERROR_FILE" | head -3 | tr '\n' '; ')
+    fi
+    echo "$(date) [WARNING] Log-Upload-Timeout nach 30 Sekunden - Details: $LOG_ERROR" >> "$LOGFILE"
+    rm -f "$LOG_SCP_ERROR_FILE"
     log_success
 elif [ $LOG_UPLOAD_EXIT -ne 0 ]; then
-    # Log-Upload-Fehler sind nicht kritisch, trotzdem Erfolg protokollieren
+    # Log-Upload-Fehler sind nicht kritisch, aber wir loggen sie trotzdem
+    LOG_ERROR=""
+    if [ -f "$LOG_SCP_ERROR_FILE" ] && [ -s "$LOG_SCP_ERROR_FILE" ]; then
+        LOG_ERROR=$(cat "$LOG_SCP_ERROR_FILE" | head -3 | tr '\n' '; ')
+    fi
+    echo "$(date) [WARNING] Log-Upload fehlgeschlagen (Exit Code: $LOG_UPLOAD_EXIT) - Details: $LOG_ERROR" >> "$LOGFILE"
+    rm -f "$LOG_SCP_ERROR_FILE"
     log_success
 else
     # Alles erfolgreich
+    rm -f "$LOG_SCP_ERROR_FILE"
     log_success
 fi
 
