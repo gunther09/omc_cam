@@ -15,10 +15,28 @@ fi
 
 # === Lokale Konfiguration ===
 WORK_DIR="/home/OMC"
-LOGFILE="$WORK_DIR/kamera.log"
-STATUS_FILE="$WORK_DIR/error.log" # Behält den Namen, erlaubt jetzt Kommentare
-IMAGE="$WORK_DIR/strecke.jpg"
-cd $WORK_DIR || exit 1
+RUNTIME_DIR="${RUNTIME_DIR:-/run/omc}"
+LOCKFILE="${LOCKFILE:-/tmp/omc-kamera.lock}"
+LOGFILE=""
+STATUS_FILE="" # Behält den Namen, erlaubt jetzt Kommentare
+IMAGE=""
+
+# Einfache Sperre, damit bei langsamer Verbindung keine parallelen Läufe entstehen.
+if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCKFILE"
+    flock -n 9 || exit 0
+fi
+
+mkdir -p "$RUNTIME_DIR" 2>/dev/null || RUNTIME_DIR="/dev/shm/omc"
+mkdir -p "$RUNTIME_DIR" 2>/dev/null || RUNTIME_DIR="/tmp/omc"
+mkdir -p "$RUNTIME_DIR" || exit 1
+
+LOGFILE="$RUNTIME_DIR/kamera.log"
+STATUS_FILE="$RUNTIME_DIR/error.log"
+IMAGE="$RUNTIME_DIR/strecke.jpg"
+touch "$LOGFILE" "$STATUS_FILE" || exit 1
+
+cd "$WORK_DIR" || exit 1
 
 # Funktion zur Protokollierung des Erfolgs
 log_success() {
@@ -86,13 +104,15 @@ handle_error() {
 
 
     # Fehler im Hauptlog protokollieren (mit ERR-Markierung)
-    echo "$LINE_NUM [$(date)] ERR: $ERROR_MSG" | tee -a "$LOGFILE"
+    echo "$LINE_NUM [$(date)] ERR: $ERROR_MSG" >> "$LOGFILE"
+    echo "ERR: $ERROR_MSG" >&2
 
     # Neustart prüfen
     if [ "$NEUER_ZAEHLER" -ge 10 ]; then
         # Neustart-Meldung loggen (als OK, da Aktion erfolgt)
         LINE_NUM=$((LINE_NUM + 1))
-        echo "$LINE_NUM [$(date)] OK Raspberry Pi wird neu gestartet (10 aufeinanderfolgende Fehler)" | tee -a "$LOGFILE"
+        echo "$LINE_NUM [$(date)] OK Raspberry Pi wird neu gestartet (10 aufeinanderfolgende Fehler)" >> "$LOGFILE"
+        echo "OK Raspberry Pi wird neu gestartet (10 aufeinanderfolgende Fehler)" >&2
 
         # WICHTIG: Zähler *vor* dem Neustart zurücksetzen (in der COUNTER=-Zeile)
         if [ -f "$STATUS_FILE" ] && grep -q '^COUNTER=' "$STATUS_FILE"; then
@@ -169,14 +189,29 @@ convert "$IMAGE" \
     -fill "#8A9A9A" -draw "rectangle 0,0 600,600" \
     "$IMAGE" || handle_error "Fehler bei der Bildbearbeitung mit ImageMagick"
 # FTP- und Backup-Operationen mit Timeout
-sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 $FTP_USER@$FTP_HOST "mkdir -p $REMOTE_DIR/$MONAT" 2>>$LOGFILE || handle_error "Fehler beim Erstellen des Backup-Ordners (Timeout nach 2 Minuten)"
-sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 $FTP_USER@$FTP_HOST "cp $REMOTE_DIR/strecke.jpg $REMOTE_DIR/$MONAT/$FILEDATE.jpg" 2>>$LOGFILE || handle_error "Fehler beim Archivieren des alten Bilds (Timeout nach 2 Minuten)"
-sshpass -p "$FTP_PASS" scp -o ConnectTimeout=120 "$IMAGE" $FTP_USER@$FTP_HOST:$REMOTE_DIR/strecke.jpg 2>>$LOGFILE || handle_error "Fehler beim Hochladen des neuen Bilds (Timeout nach 2 Minuten)"
-# Erfolgsprotokollierung und Hochladen der Logs
-log_success # Setzt den Fehlerzähler zurück
+SSH_ERR_FILE="/tmp/kamera_ssh_mkdir_$$"
+sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 "$FTP_USER@$FTP_HOST" "mkdir -p $REMOTE_DIR/$MONAT" 2>"$SSH_ERR_FILE" || {
+    SSH_ERR=$(head -3 "$SSH_ERR_FILE" | tr '\n' '; ')
+    rm -f "$SSH_ERR_FILE"
+    handle_error "Fehler beim Erstellen des Backup-Ordners (Timeout nach 2 Minuten) - Details: $SSH_ERR"
+}
+rm -f "$SSH_ERR_FILE"
 
-# Hochladen der Haupt-Logdatei
-sshpass -p "$FTP_PASS" scp -o ConnectTimeout=120 "$LOGFILE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/$(basename "$LOGFILE")" 2>>"$LOGFILE" || handle_error "Fehler beim Hochladen der Log-Datei ($(basename "$LOGFILE")) (Timeout nach 2 Minuten)"
+SSH_ERR_FILE="/tmp/kamera_ssh_cp_$$"
+sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 "$FTP_USER@$FTP_HOST" "cp $REMOTE_DIR/strecke.jpg $REMOTE_DIR/$MONAT/$FILEDATE.jpg" 2>"$SSH_ERR_FILE" || {
+    SSH_ERR=$(head -3 "$SSH_ERR_FILE" | tr '\n' '; ')
+    rm -f "$SSH_ERR_FILE"
+    handle_error "Fehler beim Archivieren des alten Bilds (Timeout nach 2 Minuten) - Details: $SSH_ERR"
+}
+rm -f "$SSH_ERR_FILE"
 
-# NEU: Hochladen der Fehlerzähler-Datei (error.log)
-sshpass -p "$FTP_PASS" scp -o ConnectTimeout=120 "$STATUS_FILE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/$(basename "$STATUS_FILE")" 2>>"$LOGFILE" || handle_error "Fehler beim Hochladen der Zähler-Datei ($(basename "$STATUS_FILE")) (Timeout nach 2 Minuten)"
+SCP_ERR_FILE="/tmp/kamera_scp_image_$$"
+sshpass -p "$FTP_PASS" scp -o ConnectTimeout=120 "$IMAGE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/strecke.jpg" 2>"$SCP_ERR_FILE" || {
+    SCP_ERR=$(head -3 "$SCP_ERR_FILE" | tr '\n' '; ')
+    rm -f "$SCP_ERR_FILE"
+    handle_error "Fehler beim Hochladen des neuen Bilds (Timeout nach 2 Minuten) - Details: $SCP_ERR"
+}
+rm -f "$SCP_ERR_FILE"
+
+# Erfolgsprotokollierung; Log-Upload ist ausgelagert (stündlicher Cronjob).
+log_success

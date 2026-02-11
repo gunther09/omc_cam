@@ -19,12 +19,25 @@ export HOME="/home/OMC"
 
 # === Lokale Konfiguration ===
 WORK_DIR="/home/OMC"
-IMAGE="$WORK_DIR/tapocam.jpg"
-LOGFILE="$WORK_DIR/tapo.log"
+RUNTIME_DIR="${RUNTIME_DIR:-/run/omc}"
+LOCKFILE="${LOCKFILE:-/tmp/omc-tapo.lock}"
+IMAGE=""
+LOGFILE=""
 MAX_LOG_LINES=500
 
-# Silent Mode für Cronjobs (keine Progress-Updates, nur Fehler)
-SILENT_MODE=1
+# Einfache Sperre, damit bei langsamer Verbindung keine parallelen Läufe entstehen.
+if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCKFILE"
+    flock -n 9 || exit 0
+fi
+
+mkdir -p "$RUNTIME_DIR" 2>/dev/null || RUNTIME_DIR="/dev/shm/omc"
+mkdir -p "$RUNTIME_DIR" 2>/dev/null || RUNTIME_DIR="/tmp/omc"
+mkdir -p "$RUNTIME_DIR" || exit 1
+
+IMAGE="$RUNTIME_DIR/tapocam.jpg"
+LOGFILE="$RUNTIME_DIR/tapo.log"
+touch "$LOGFILE" || exit 1
 
 cd "$WORK_DIR" || exit 1
 
@@ -172,34 +185,6 @@ fi
 # Temporäre Datei aufräumen
 rm -f "$SCP_ERROR_FILE"
 
-# === Log mit hochladen (nur wenn Bild erfolgreich hochgeladen wurde) ===
-# Temporäre Datei für Log-Upload-Fehlermeldungen
-LOG_SCP_ERROR_FILE="/tmp/log_scp_error_$$"
-
-timeout 30 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=15 -o ServerAliveInterval=5 "$LOGFILE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/tapo.log" 2>"$LOG_SCP_ERROR_FILE"
-
-LOG_UPLOAD_EXIT=$?
-if [ $LOG_UPLOAD_EXIT -eq 124 ]; then
-    # Log-Upload-Fehler sind nicht kritisch, aber wir loggen sie trotzdem
-    LOG_ERROR=""
-    if [ -f "$LOG_SCP_ERROR_FILE" ] && [ -s "$LOG_SCP_ERROR_FILE" ]; then
-        LOG_ERROR=$(cat "$LOG_SCP_ERROR_FILE" | head -3 | tr '\n' '; ')
-    fi
-    echo "$(date) [WARNING] Log-Upload-Timeout nach 30 Sekunden - Details: $LOG_ERROR" >> "$LOGFILE"
-    rm -f "$LOG_SCP_ERROR_FILE"
-    log_success
-elif [ $LOG_UPLOAD_EXIT -ne 0 ]; then
-    # Log-Upload-Fehler sind nicht kritisch, aber wir loggen sie trotzdem
-    LOG_ERROR=""
-    if [ -f "$LOG_SCP_ERROR_FILE" ] && [ -s "$LOG_SCP_ERROR_FILE" ]; then
-        LOG_ERROR=$(cat "$LOG_SCP_ERROR_FILE" | head -3 | tr '\n' '; ')
-    fi
-    echo "$(date) [WARNING] Log-Upload fehlgeschlagen (Exit Code: $LOG_UPLOAD_EXIT) - Details: $LOG_ERROR" >> "$LOGFILE"
-    rm -f "$LOG_SCP_ERROR_FILE"
-    log_success
-else
-    # Alles erfolgreich
-    rm -f "$LOG_SCP_ERROR_FILE"
-    log_success
-fi
+# Log-Upload ist absichtlich ausgelagert (stündlicher Cronjob), um SD- und I/O-Last zu senken.
+log_success
 
