@@ -138,7 +138,7 @@ handle_error() {
 rotate_remote_image() {
     CAM_NAME="$1"
     SOURCE_IMAGE="$2"
-    ROTATION_DIR="$(dirname "$REMOTE_DIR")/daily_cam_rotation"
+    ROTATION_DIR="$(dirname "$REMOTE_DIR")/wp-content/uploads/daily_cam_rotation"
     TS="$(date +"%Y%m%d_%H%M%S")"
     ROTATION_FILE="$ROTATION_DIR/daily_rotation_${CAM_NAME}_${TS}.jpg"
 
