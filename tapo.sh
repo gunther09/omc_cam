@@ -13,6 +13,11 @@ fi
 # Konfiguration laden
 . "$CONFIG_FILE"
 
+case "$ROTATION_KEEP" in
+    ''|*[!0-9]*) ROTATION_KEEP=20 ;;
+esac
+[ "$ROTATION_KEEP" -lt 1 ] && ROTATION_KEEP=1
+
 # === Umgebungsvariablen für Cron-Job-Kompatibilität ===
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export HOME="/home/OMC"
@@ -73,6 +78,23 @@ log_success() {
         echo "$LINE_NUM [$TODAY] |" >> "$LOGFILE"
     }
     trim_logfile
+}
+
+rotate_remote_image() {
+    CAM_NAME="$1"
+    SOURCE_IMAGE="$2"
+    ROTATION_BASE="$(dirname "$REMOTE_DIR")/daily_cam_rotation"
+    ROTATION_DIR="$ROTATION_BASE/$CAM_NAME"
+    TS="$(date +"%Y%m%d_%H%M%S")"
+    ROTATION_FILE="$ROTATION_DIR/daily_rotation_${CAM_NAME}_${TS}.jpg"
+
+    sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=60 "$FTP_USER@$FTP_HOST" "mkdir -p \"$ROTATION_DIR\"" >/dev/null 2>&1 || return 1
+    timeout 60 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=30 -o ServerAliveInterval=10 "$SOURCE_IMAGE" "$FTP_USER@$FTP_HOST:$ROTATION_FILE" >/dev/null 2>&1 || return 1
+    sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=60 "$FTP_USER@$FTP_HOST" \
+        "i=0; for f in \$(ls -1t \"$ROTATION_DIR\"/daily_rotation_${CAM_NAME}_*.jpg 2>/dev/null); do i=\$((i+1)); if [ \$i -gt $ROTATION_KEEP ]; then rm -f \"\$f\"; fi; done" \
+        >/dev/null 2>&1 || return 1
+
+    return 0
 }
 
 # === Datums- und Temperaturvariablen setzen ===
@@ -185,6 +207,9 @@ fi
 # Temporäre Datei aufräumen
 rm -f "$SCP_ERROR_FILE"
 
+if ! rotate_remote_image "tapo" "$IMAGE"; then
+    log_error "Rotation in daily_cam_rotation fehlgeschlagen"
+fi
+
 # Log-Upload ist absichtlich ausgelagert (stündlicher Cronjob), um SD- und I/O-Last zu senken.
 log_success
-

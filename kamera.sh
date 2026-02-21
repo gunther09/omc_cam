@@ -13,6 +13,11 @@ fi
 # Konfiguration laden
 . "$CONFIG_FILE"
 
+case "$ROTATION_KEEP" in
+    ''|*[!0-9]*) ROTATION_KEEP=20 ;;
+esac
+[ "$ROTATION_KEEP" -lt 1 ] && ROTATION_KEEP=1
+
 # === Lokale Konfiguration ===
 WORK_DIR="/home/OMC"
 RUNTIME_DIR="${RUNTIME_DIR:-/run/omc}"
@@ -130,6 +135,46 @@ handle_error() {
     fi
 }
 
+rotate_remote_image() {
+    CAM_NAME="$1"
+    SOURCE_IMAGE="$2"
+    ROTATION_BASE="$(dirname "$REMOTE_DIR")/daily_cam_rotation"
+    ROTATION_DIR="$ROTATION_BASE/$CAM_NAME"
+    TS="$(date +"%Y%m%d_%H%M%S")"
+    ROTATION_FILE="$ROTATION_DIR/daily_rotation_${CAM_NAME}_${TS}.jpg"
+
+    SSH_ROT_MK_ERR_FILE="/tmp/kamera_ssh_rotation_mkdir_$$"
+    sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 "$FTP_USER@$FTP_HOST" "mkdir -p \"$ROTATION_DIR\"" 2>"$SSH_ROT_MK_ERR_FILE" || {
+        SSH_ERR=$(head -3 "$SSH_ROT_MK_ERR_FILE" | tr '\n' '; ')
+        rm -f "$SSH_ROT_MK_ERR_FILE"
+        handle_error "Fehler beim Erstellen des Rotations-Ordners - Details: $SSH_ERR"
+        return 1
+    }
+    rm -f "$SSH_ROT_MK_ERR_FILE"
+
+    SCP_ROT_ERR_FILE="/tmp/kamera_scp_rotation_$$"
+    sshpass -p "$FTP_PASS" scp -o ConnectTimeout=120 "$SOURCE_IMAGE" "$FTP_USER@$FTP_HOST:$ROTATION_FILE" 2>"$SCP_ROT_ERR_FILE" || {
+        SCP_ERR=$(head -3 "$SCP_ROT_ERR_FILE" | tr '\n' '; ')
+        rm -f "$SCP_ROT_ERR_FILE"
+        handle_error "Fehler beim Hochladen des Rotationsbilds - Details: $SCP_ERR"
+        return 1
+    }
+    rm -f "$SCP_ROT_ERR_FILE"
+
+    SSH_ROT_CLEAN_ERR_FILE="/tmp/kamera_ssh_rotation_cleanup_$$"
+    sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 "$FTP_USER@$FTP_HOST" \
+        "i=0; for f in \$(ls -1t \"$ROTATION_DIR\"/daily_rotation_${CAM_NAME}_*.jpg 2>/dev/null); do i=\$((i+1)); if [ \$i -gt $ROTATION_KEEP ]; then rm -f \"\$f\"; fi; done" \
+        2>"$SSH_ROT_CLEAN_ERR_FILE" || {
+        SSH_ERR=$(head -3 "$SSH_ROT_CLEAN_ERR_FILE" | tr '\n' '; ')
+        rm -f "$SSH_ROT_CLEAN_ERR_FILE"
+        handle_error "Fehler beim Bereinigen der Rotationsbilder - Details: $SSH_ERR"
+        return 1
+    }
+    rm -f "$SSH_ROT_CLEAN_ERR_FILE"
+
+    return 0
+}
+
 
 
 # Internetverbindungs-Check zu Beginn
@@ -212,6 +257,8 @@ sshpass -p "$FTP_PASS" scp -o ConnectTimeout=120 "$IMAGE" "$FTP_USER@$FTP_HOST:$
     handle_error "Fehler beim Hochladen des neuen Bilds (Timeout nach 2 Minuten) - Details: $SCP_ERR"
 }
 rm -f "$SCP_ERR_FILE"
+
+rotate_remote_image "kamera" "$IMAGE"
 
 # Erfolgsprotokollierung; Log-Upload ist ausgelagert (stündlicher Cronjob).
 log_success
