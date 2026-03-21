@@ -187,8 +187,6 @@ fi
    
 # Datums- und Temperaturvariablen setzen
 DATE=$(date +"%d.%m.%Y - %H:%M") || handle_error "Fehler beim Setzen von DATE"
-FILEDATE=$(date +"%d-%m-%Y--%H-%M") || handle_error "Fehler beim Setzen von FILEDATE"
-MONAT=$(date +"%Y-%m") || handle_error "Fehler beim Setzen von MONAT"
 TEMPE=$(vcgencmd measure_temp | sed "s/temp=\(.*\)'C/\1°C/") || handle_error "Fehler beim Messen der Temperatur"
 
 # WLAN-Signal mit Qualitätsbewertung
@@ -232,23 +230,7 @@ convert "$IMAGE" \
     -gravity northwest \
     -fill "#8A9A9A" -draw "rectangle 0,0 600,600" \
     "$IMAGE" || handle_error "Fehler bei der Bildbearbeitung mit ImageMagick"
-# FTP- und Backup-Operationen mit Timeout
-SSH_ERR_FILE="/tmp/kamera_ssh_mkdir_$$"
-sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 "$FTP_USER@$FTP_HOST" "mkdir -p $REMOTE_DIR/$MONAT" 2>"$SSH_ERR_FILE" || {
-    SSH_ERR=$(head -3 "$SSH_ERR_FILE" | tr '\n' '; ')
-    rm -f "$SSH_ERR_FILE"
-    handle_error "Fehler beim Erstellen des Backup-Ordners (Timeout nach 2 Minuten) - Details: $SSH_ERR"
-}
-rm -f "$SSH_ERR_FILE"
-
-SSH_ERR_FILE="/tmp/kamera_ssh_cp_$$"
-sshpass -p "$FTP_PASS" ssh -o ConnectTimeout=120 "$FTP_USER@$FTP_HOST" "cp $REMOTE_DIR/strecke.jpg $REMOTE_DIR/$MONAT/$FILEDATE.jpg" 2>"$SSH_ERR_FILE" || {
-    SSH_ERR=$(head -3 "$SSH_ERR_FILE" | tr '\n' '; ')
-    rm -f "$SSH_ERR_FILE"
-    handle_error "Fehler beim Archivieren des alten Bilds (Timeout nach 2 Minuten) - Details: $SSH_ERR"
-}
-rm -f "$SSH_ERR_FILE"
-
+# Upload des aktuellen Bilds
 SCP_ERR_FILE="/tmp/kamera_scp_image_$$"
 sshpass -p "$FTP_PASS" scp -o ConnectTimeout=120 "$IMAGE" "$FTP_USER@$FTP_HOST:$REMOTE_DIR/strecke.jpg" 2>"$SCP_ERR_FILE" || {
     SCP_ERR=$(head -3 "$SCP_ERR_FILE" | tr '\n' '; ')
